@@ -1,4 +1,4 @@
-module github.com/amupxm/xmus-router/middleware/connectionutils
+module github.com/amupxm/xmus-router/middleware/connection_utils
 
 go 1.16
 

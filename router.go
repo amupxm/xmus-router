@@ -16,7 +16,7 @@ type (
 		Middleware  []*Middleware
 	}
 	Middleware struct {
-		Handler func(context *RouterContext)
+		Handler func(context *RouterContext, i ...interface{})
 	}
 	RouterContext struct {
 		Response  http.ResponseWriter
@@ -69,8 +69,9 @@ func (rt *router) CustomMethodRequest(method, path string, f func(ctx *RouterCon
 
 	return route
 }
-func (r *route) AddMiddleWare(f func(context *RouterContext)) {
+func (r *route) AddMiddleWare(f func(context *RouterContext, i ...interface{})) *route {
 	r.Middleware = append(r.Middleware, &Middleware{f})
+	return r
 }
 func (rt *router) addRoute(path, method string, urlParams map[string]string, f func(context *RouterContext)) *route {
 	// check path exists then if path exists and methods are equal throw an error
