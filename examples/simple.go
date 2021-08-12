@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log"
 	"net/http"
 
 	router "github.com/amupxm/xmus-router"
@@ -17,6 +16,5 @@ func main() {
 }
 
 func cc(r *router.RouterContext) {
-	log.Println(r.URLParams)
 	r.Response.Write([]byte("Hello World!"))
 }

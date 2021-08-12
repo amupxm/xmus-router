@@ -3,7 +3,6 @@ package router
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"strings"
 )
@@ -92,12 +91,7 @@ func (rt *router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if rt.isMatchedPath(routePath, r.URL.Path) {
 			for _, i := range route {
 				if i.Method == r.Method {
-					log.Println(2)
-
 					urlParams, _ := rt.extractUrlParams(r.URL.Path, routePath)
-
-					log.Println(3)
-
 					for _, j := range i.Middleware {
 						j.Handler(&RouterContext{Response: w, Request: r, URLParams: urlParams})
 					}
