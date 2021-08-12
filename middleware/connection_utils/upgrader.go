@@ -17,7 +17,7 @@ func LimitRequestBody(c *router.RouterContext, maxBodySize int64) {
 	}
 }
 
-func CancelAll(c *router.RouterContext, maxBodySize int64) {
+func CancelAll(c *router.RouterContext) {
 	c.SetStatus(413).JSON(`{"error":"calcelled"}`)
 	r := c.Request.Context()
 	r.Done()

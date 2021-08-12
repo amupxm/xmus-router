@@ -16,7 +16,7 @@ type (
 		Middleware  []*Middleware
 	}
 	Middleware struct {
-		Handler func(context *RouterContext, i ...interface{})
+		Handler func(context *RouterContext)
 	}
 	RouterContext struct {
 		Response  http.ResponseWriter
@@ -69,7 +69,7 @@ func (rt *router) CustomMethodRequest(method, path string, f func(ctx *RouterCon
 
 	return route
 }
-func (r *route) AddMiddleWare(f func(context *RouterContext, i ...interface{})) *route {
+func (r *route) AddMiddleWare(f func(context *RouterContext)) *route {
 	r.Middleware = append(r.Middleware, &Middleware{f})
 	return r
 }

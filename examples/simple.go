@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	router "github.com/amupxm/xmus-router"
-	connectionUtils "github.com/amupxm/xmus-router/middleware/connectionutils"
+	connectionUtils "github.com/amupxm/xmus-router/middleware/connection_utils"
 	middlewareLogger "github.com/amupxm/xmus-router/middleware/logger"
 )
 
