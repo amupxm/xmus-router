@@ -1,13 +1,17 @@
-package main
+# XMUS-router
 
-import (
-	"log"
-	"net/http"
+Simple router build on `net/http` supports custom middleWare.
 
-	router "github.com/amupxm/xmus-router"
-	middlewareLogger "github.com/amupxm/xmus-router/middleware/logger"
-)
+If any feature is needed, please report it as a bug.
+ 
 
+
+## usage
+
+simply import router and use it ✌️.
+
+
+```go
 func main() {
 	router := router.NewRouter()
 	buildInLogger := middlewareLogger.Logger
@@ -28,3 +32,8 @@ func SampleHandlerNumTwo(c *router.RouterContext) {
 func LogUserAgent(c *router.RouterContext) {
 	log.Println(c.Request.UserAgent())
 }
+
+```
+
+the `RouterContext` contains request , responseWriter and url parameters plus a few methods to make is easy to use.
+

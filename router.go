@@ -33,6 +33,12 @@ type (
 		PrepareURLParams(path string) (map[string]string, error)
 		ServeHTTP(w http.ResponseWriter, r *http.Request)
 		CustomMethodRequest(method, path string, f func(ctx *RouterContext)) *route
+		GET(path string, f func(ctx *RouterContext)) *route
+		POST(path string, f func(ctx *RouterContext)) *route
+		PUT(path string, f func(ctx *RouterContext)) *route
+		DELETE(path string, f func(ctx *RouterContext)) *route
+		PATCH(path string, f func(ctx *RouterContext)) *route
+		OPTIONS(path string, f func(ctx *RouterContext)) *route
 	}
 )
 
