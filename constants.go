@@ -1,11 +1,14 @@
-package logger
+package router
 
-import (
-	"fmt"
-	"log"
+import "regexp"
 
-	router "github.com/amupxm/xmus-router"
-)
+var delegateRegexp, _ = regexp.Compile(`\/((.?)*\/)*\*\/`)
+
+var hasParamsRegexp, _ = regexp.Compile(`\:(\w|\d)*`)
+
+var validatePathRegex, _ = regexp.Compile(`\/((.?)*\/)*`)
+
+var hasSpaceRegex, _ = regexp.Compile(`\s`)
 
 var (
 	greenBg   = string([]byte{27, 91, 57, 55, 59, 52, 50, 109})
@@ -25,29 +28,10 @@ var (
 	reset     = string([]byte{27, 91, 48, 109})
 )
 
-func Logger(c *router.RouterContext) {
-	b := whiteBg
-	switch c.Request.Method {
-	case "GET":
-		b = greenBg
-	case "POST":
-		b = blueBg
-	case "PUT":
-		b = yellowBg
-	case "DELETE":
-		b = redBg
-	case "PATCH":
-		b = yellowBg
-	default:
-		b = whiteBg
-	}
-
-	log.Printf("%s | %s | %s ", colorPrint(c.Request.Method, b), c.Request.URL.Path, c.Request.Proto)
-}
-func colorPrint(format string, color string, s ...interface{}) string {
-	if len(s) == 0 {
-		return fmt.Sprint(color + format + reset)
-	}
-	data := fmt.Sprintf(format, s...)
-	return fmt.Sprint(color + data + reset)
-}
+const (
+	MethodGet    = "GET"
+	MethodPost   = "POST"
+	MethodPut    = "PUT"
+	MethodDelete = "DELETE"
+	MethodPatch  = "PATCH"
+)

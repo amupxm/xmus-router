@@ -1,114 +1,170 @@
 package router
 
 import (
-	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 )
 
 type (
-	route struct {
-		Method      string
-		HandlerFunc func(context *RouterContext)
-		URLParams   map[string]string
-		Ctx         *context.Context
-		Middleware  []*Middleware
+	middleware struct {
+		handler func(context *XmusContext) bool
 	}
-	Middleware struct {
-		Handler func(context *RouterContext)
-	}
-	RouterContext struct {
-		Response  http.ResponseWriter
-		Request   *http.Request
-		URLParams map[string]string
-	}
+
 	router struct {
-		NotFoundHandler         func(context *RouterContext)
-		MethodNotAllowedHandler func(context *RouterContext)
+		notFoundHandler         func(context *XmusContext)
+		methodNotAllowedHandler func(context *XmusContext)
 		routes                  map[string][]*route // path : sroute map
-		Handler                 func(http.ResponseWriter, *http.Request)
+		//
+		echoLogs bool
 	}
 	Router interface {
-		PrepareURLParams(path string) (map[string]string, error)
+		AddCustomMethodRoute(method string, path string, f func(context *XmusContext)) *route
 		ServeHTTP(w http.ResponseWriter, r *http.Request)
-		CustomMethodRequest(method, path string, f func(ctx *RouterContext)) *route
-		GET(path string, f func(ctx *RouterContext)) *route
-		POST(path string, f func(ctx *RouterContext)) *route
-		PUT(path string, f func(ctx *RouterContext)) *route
-		DELETE(path string, f func(ctx *RouterContext)) *route
-		PATCH(path string, f func(ctx *RouterContext)) *route
-		OPTIONS(path string, f func(ctx *RouterContext)) *route
+
+		DELEGATE(path, method string, f func(context *XmusContext)) *route
+		GET(path string, f func(ctx *XmusContext)) *route
+		POST(path string, f func(ctx *XmusContext)) *route
+		PUT(path string, f func(ctx *XmusContext)) *route
+		DELETE(path string, f func(ctx *XmusContext)) *route
+		PATCH(path string, f func(ctx *XmusContext)) *route
+	}
+	RouterOptions struct {
+		NotFoundHandler         func(context *XmusContext)
+		MethodNotAllowedHandler func(context *XmusContext)
+		EchoLogs                bool
 	}
 )
 
-func NewRouter() Router {
-	return &router{
-		routes: make(map[string][]*route),
+func NewRouter(opt *RouterOptions) Router {
+
+	router := router{
+		routes:                  make(map[string][]*route),
+		notFoundHandler:         NotFoundHandler,
+		methodNotAllowedHandler: methodNotAllowed,
+		echoLogs:                true,
 	}
+	if opt.NotFoundHandler != nil {
+		router.notFoundHandler = opt.NotFoundHandler
+	}
+	if opt.MethodNotAllowedHandler != nil {
+		router.methodNotAllowedHandler = opt.MethodNotAllowedHandler
+	}
+	router.echoLogs = opt.EchoLogs
+
+	return &router
 }
 
-func (rt *router) trimPath(path string) (string, error) {
-	// trim path
-	path = strings.TrimSpace(path)
-	// path should start with /
-	if !strings.HasPrefix(path, "/") {
-		return "", fmt.Errorf("path should start with /")
-	}
-	// path should end with /
-	if !strings.HasSuffix(path, "/") {
-		return "", fmt.Errorf("path should end with /")
-	}
-	return path, nil
-}
-
-func (rt *router) CustomMethodRequest(method, path string, f func(ctx *RouterContext)) *route {
-	path, err := rt.trimPath(path)
-	if err != nil {
+func (r *router) AddCustomMethodRoute(method string, path string, f func(context *XmusContext)) *route {
+	if err := validatePath(path); err != nil {
 		panic(err)
 	}
-	urlParams, err := rt.PrepareURLParams(path)
-	if err != nil {
-		panic(err)
+	nr := &route{method: method, handlerFunc: f, middleware: make([]*middleware, 0)} //NewRoute
+	if _, ok := r.routes[path]; !ok {
+		r.routes[path] = make([]*route, 0)
 	}
-	route := rt.addRoute(path, method, urlParams, f)
-
-	return route
+	r.routes[path] = append(r.routes[path], nr)
+	return nr
 }
-func (r *route) AddMiddleWare(f func(context *RouterContext)) *route {
-	r.Middleware = append(r.Middleware, &Middleware{f})
-	return r
-}
-func (rt *router) addRoute(path, method string, urlParams map[string]string, f func(context *RouterContext)) *route {
-	// check path exists then if path exists and methods are equal throw an error
-	if exist := rt.routes[path]; exist != nil {
-		for _, i := range exist {
-			if i.Method == method {
-				panic(fmt.Sprintf("duplicated route %s with method %s ", path, method))
-			}
-		}
-	}
-	route := route{Method: method, HandlerFunc: f}
-	rt.routes[path] = append(rt.routes[path], &route)
-	return &route
-}
-
 func (rt *router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	for routePath, route := range rt.routes {
-		if rt.isMatchedPath(routePath, r.URL.Path) {
-			for _, i := range route {
-				if i.Method == r.Method {
-					urlParams, _ := rt.extractUrlParams(r.URL.Path, routePath)
-					for _, j := range i.Middleware {
-						j.Handler(&RouterContext{Response: w, Request: r, URLParams: urlParams})
+	// we have three types of pathes :
+	// pathes like /amupxm/some/stuff
+	// pathes like /amupxm/:param1/:param2
+	// pathes like /amupxm/:param1/*
+	// ist better to check first its delegate path ?
+	if !strings.HasSuffix(r.URL.Path, "/") {
+		r.URL.Path = fmt.Sprintf("%s/", r.URL.Path)
+	}
+	for routePath, routeFunc := range rt.routes {
+		isDelegate := delegateRegexp.MatchString(routePath)
+		hasParams := hasParamsRegexp.MatchString(routePath)
+		reqArr := strings.Split(r.URL.Path, "/")
+		pathArr := strings.Split(routePath, "/")
+		// route without any params or delegate
+		if !hasParams && !isDelegate && r.URL.Path == routePath {
+			rt.mathMethod(w, r, reqArr, pathArr, hasParams, isDelegate, routeFunc)
+			return
+		}
+		hasSameLen := len(reqArr) == len(pathArr)
+		// wrong route to request
+		if !hasSameLen && !isDelegate {
+			continue
+		}
+		if (hasSameLen && hasParams) || isDelegate {
+			for i, path := range pathArr {
+				if path != reqArr[i] {
+					// if be delegte path
+					if path == "*" && isDelegate {
+
+						rt.mathMethod(w, r, reqArr, pathArr, hasParams, isDelegate, routeFunc)
+						return
 					}
-					i.HandlerFunc(&RouterContext{Response: w, Request: r, URLParams: urlParams})
-					return
+					if path != reqArr[i] {
+						break
+					}
 				}
 			}
-			MethodNotAllowed(&RouterContext{Response: w, Request: r, URLParams: map[string]string{}})
+			rt.mathMethod(w, r, reqArr, pathArr, hasParams, isDelegate, routeFunc)
 			return
 		}
 	}
-	NotFoundHandler(&RouterContext{Response: w, Request: r, URLParams: map[string]string{}})
+	rt.notFoundHandler(rt.createContex(w, r))
+}
+
+func (rt router) mathMethod(w http.ResponseWriter, r *http.Request, reqArr, pathArr []string, hasParams, hasDelegate bool, routes []*route) {
+	context := rt.createContex(w, r)
+	for _, route := range routes {
+		if r.Method == route.method {
+			if hasParams {
+				context.buildParams(reqArr, pathArr)
+			}
+			rt.runHandler(w, r, route, context)
+			return
+
+		}
+	}
+	rt.methodNotAllowedHandler(context)
+}
+
+func (rt router) createContex(w http.ResponseWriter, r *http.Request) *XmusContext {
+	return &XmusContext{
+		Response:  w,
+		Request:   r,
+		URLParams: make(map[string]string),
+	}
+}
+
+func (rt router) runHandler(w http.ResponseWriter, r *http.Request, route *route, context *XmusContext) {
+	// TODO prevent panic
+	if rt.echoLogs {
+		var b string
+		switch r.Method {
+		case "GET":
+			b = greenBg
+		case "POST":
+			b = blueBg
+		case "PUT":
+			b = yellowBg
+		case "DELETE":
+			b = redBg
+		case "PATCH":
+			b = yellowBg
+		default:
+			b = whiteBg
+		}
+		log.Printf("%v%s%v | %s | %s", b, r.Method, reset, r.URL.Path, r.Proto)
+	}
+	// run middlewares
+	ln := len(route.middleware)
+	cancel := false
+	for i := 0; i < ln; i++ {
+		cancel = route.middleware[i].handler(context)
+		if cancel {
+			break
+		}
+	}
+	if !cancel {
+		route.handlerFunc(context)
+	}
 }
