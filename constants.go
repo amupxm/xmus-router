@@ -1,10 +1,22 @@
 package router
 
-import "regexp"
+import (
+	"errors"
+	"regexp"
+)
 
-var delegateRegexp, _ = regexp.Compile(`\/((.?)*\/)*\*\/`)
+var error404 = []byte(`{"error": "Page Not found"}`)
+var error405 = []byte(`{"error": "Method Not Allowed"}`)
 
-var hasParamsRegexp, _ = regexp.Compile(`\:(\w|\d)*`)
+var validPathStartAndEndRegex = regexp.MustCompile(`^\/(.?)*\/$`)
+
+var validateRequestPathRegex = regexp.MustCompile(`^(.?)*\/$`)
+
+var delegateRegex, _ = regexp.Compile(`\/((.?)*\/)*\*\/$`)
+
+var hasParamsRegex, _ = regexp.Compile(`\:(\w|\d)*`)
+
+var getURLParamsRegex = regexp.MustCompile(`\:((\W^\/)|\w|\d)*\/`)
 
 var validatePathRegex, _ = regexp.Compile(`\/((.?)*\/)*`)
 
@@ -35,3 +47,9 @@ const (
 	MethodDelete = "DELETE"
 	MethodPatch  = "PATCH"
 )
+
+var errMethodNotAllowed = errors.New("405")
+var errNotFound = errors.New("404")
+
+var errorNotFoundMessage = []byte(`{"error":"Not found"}`)
+var errorMethodNotAllowedMessage = []byte(`{"error":"method not allowed"}`)

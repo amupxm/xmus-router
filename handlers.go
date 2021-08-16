@@ -1,23 +1,35 @@
 package router
 
-import "fmt"
+import "net/http"
 
-func (r *router) GET(path string, f func(ctx *XmusContext)) *route {
-	return r.AddCustomMethodRoute("GET", path, f)
+func (rt router) GET(path string, handler http.Handler) {
+	rt.Register(path, http.MethodGet, handler)
+}
+func (rt router) POST(path string, handler http.Handler) {
+	rt.Register(path, http.MethodPost, handler)
+}
+func (rt router) PUT(path string, handler http.Handler) {
+	rt.Register(path, http.MethodPut, handler)
+}
+func (rt router) DELETE(path string, handler http.Handler) {
+	rt.Register(path, http.MethodDelete, handler)
+}
+func (rt router) PATCH(path string, handler http.Handler) {
+	rt.Register(path, http.MethodPatch, handler)
 }
 
-func (r *router) POST(path string, f func(ctx *XmusContext)) *route {
-	return r.AddCustomMethodRoute("POST", path, f)
+func defaultNotFoundHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header()["Content-Type"] = []string{"application/json"}
+		w.WriteHeader(http.StatusNotFound)
+		w.Write(errorNotFoundMessage)
+	})
 }
-func (r *router) PUT(path string, f func(ctx *XmusContext)) *route {
-	return r.AddCustomMethodRoute("PUT", path, f)
-}
-func (r *router) DELETE(path string, f func(ctx *XmusContext)) *route {
-	return r.AddCustomMethodRoute("DELETE", path, f)
-}
-func (r *router) PATCH(path string, f func(ctx *XmusContext)) *route {
-	return r.AddCustomMethodRoute("PATCH", path, f)
-}
-func (r *router) DELEGATE(path, method string, f func(ctx *XmusContext)) *route {
-	return r.AddCustomMethodRoute(method, fmt.Sprintf("%s*/", path), f)
+
+func defaultMethodNotAllowedHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header()["Content-Type"] = []string{"application/json"}
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		w.Write(errorMethodNotAllowedMessage)
+	})
 }
