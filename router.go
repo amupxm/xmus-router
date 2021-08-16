@@ -10,6 +10,12 @@ type (
 	Router interface {
 		ServeHTTP(http.ResponseWriter, *http.Request)
 		Register(path, method string, handler http.Handler) error
+		GET(path string, handler http.Handler)
+		POST(path string, handler http.Handler)
+		PUT(path string, handler http.Handler)
+		DELETE(path string, handler http.Handler)
+		PATCH(path string, handler http.Handler)
+		DELEGATE(path string, method string, handler http.Handler)
 	}
 	router struct {
 		echoRoutes       bool

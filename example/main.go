@@ -19,16 +19,12 @@ func NewH(test string) HandlerOne {
 	return &handlerOne{test}
 }
 func main() {
-	rt := router.NewRouter()
+	rt := router.NewRouter(&router.RouterOption{})
 	h1 := NewH("hi1")
-	h2 := NewH("hi2")
-	h3 := NewH("hi3")
+	h2 := NewH("hi21")
 
-	rt.Register(h1, "/", "GET")
-
-	rt.Register(h2, "/hi/:dd/:cc/23/", "GET")
-
-	rt.Register(h3, "/by/", "GET")
+	rt.GET("/hello/", h1)
+	rt.DELEGATE("/bye/", http.MethodGet, h2)
 
 	http.ListenAndServe(":8080", rt)
 }
