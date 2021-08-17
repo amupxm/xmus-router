@@ -8,7 +8,7 @@ import (
 func validatePath(path string) string {
 
 	if strings.Contains(path, "//") {
-		panic("p[ath must not inclide //")
+		panic("path must not include //")
 	}
 	if path == "" {
 		path = "/"

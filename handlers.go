@@ -23,18 +23,3 @@ func (rt router) PATCH(path string, handler http.Handler) {
 func (rt router) DELEGATE(path string, method string, handler http.Handler) {
 	rt.Register(fmt.Sprintf("%s*/", path), method, handler)
 }
-func defaultNotFoundHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header()["Content-Type"] = []string{"application/json"}
-		w.WriteHeader(http.StatusNotFound)
-		w.Write(errorNotFoundMessage)
-	})
-}
-
-func defaultMethodNotAllowedHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header()["Content-Type"] = []string{"application/json"}
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		w.Write(errorMethodNotAllowedMessage)
-	})
-}

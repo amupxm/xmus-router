@@ -8,6 +8,7 @@ func TestValidatePath_Success(t *testing.T) {
 	testTable := []struct {
 		P, R string
 	}{
+		{"", "/"},
 		{"/", "/"},
 		{"/a/", "/a/"},
 		{"/a/a/", "/a/a/"},
@@ -21,10 +22,12 @@ func TestValidatePath_Success(t *testing.T) {
 }
 func TestValidatePath_Failed(t *testing.T) {
 	testTable := []struct {
-		P, R string
+		P string
 	}{
-		{"/a", "/a/"},
-		{"/a/a", "/a/a/"},
+		{"/a"},
+		{"/a/a"},
+		{"/a/a//"},
+		{"/a/a/:a/:a/"},
 	}
 	for testCase, test := range testTable {
 		//check any panic

@@ -80,3 +80,142 @@ func TestContextJsonAndStatus(t *testing.T) {
 		}
 	}
 }
+
+func TestHttpMethoddNotAllowed(t *testing.T) {
+	rt := NewRouter(&RouterOption{})
+
+	testTable := []struct {
+		Method             string
+		RequestPath        string
+		ExpectedStatusCode int
+	}{
+		{"POST", "/", 405},
+		{"PUT", "/", 405},
+		{"PATCH", "/", 405},
+	}
+	for testCase, test := range testTable {
+		req, _ := http.NewRequest(test.Method, test.RequestPath, nil)
+		rt.GET(test.RequestPath, func() http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(200)
+			})
+		}())
+		testReq := httptest.NewRecorder()
+		rt.ServeHTTP(testReq, req)
+		if testReq.Code != test.ExpectedStatusCode {
+			t.Errorf("#%d: response code is not equal , got %d , expected %d", testCase, testReq.Code, test.ExpectedStatusCode)
+			continue
+
+		}
+	}
+}
+
+func TestHttpNotFound(t *testing.T) {
+	rt := NewRouter(&RouterOption{})
+
+	testTable := []struct {
+		Method             string
+		RequestPath        string
+		ExpectedStatusCode int
+	}{
+		{"POST", "/hello", 404},
+		{"PUT", "/bye", 404},
+		{"PATCH", "/amupxm", 404},
+	}
+	for testCase, test := range testTable {
+		req, _ := http.NewRequest(test.Method, test.RequestPath, nil)
+		rt.GET("/", func() http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(200)
+			})
+		}())
+		testReq := httptest.NewRecorder()
+		rt.ServeHTTP(testReq, req)
+		if testReq.Code != test.ExpectedStatusCode {
+			t.Errorf("#%d: response code is not equal , got %d , expected %d", testCase, testReq.Code, test.ExpectedStatusCode)
+			continue
+
+		}
+	}
+}
+
+func TestHandlerRegister(t *testing.T) {
+	rt := NewRouter(&RouterOption{})
+	testTable := []struct {
+		Path    string
+		Method  string
+		Handler http.Handler
+	}{
+		{"/", "GET", func() http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("GET")) })
+		}()},
+		{"/", "POST", func() http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("POST")) })
+		}()},
+		{"/", "PUT", func() http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("PUT")) })
+		}()},
+		{"/", "DELETE", func() http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("DELETE")) })
+		}()},
+		{"/", "PATCH", func() http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("PATCH")) })
+		}()},
+		{"/hello/", "PATCH", func() http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("PATCH")) })
+		}()},
+		{"/param1/param2/param3/param4/", "PATCH", func() http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("PATCH")) })
+		}()},
+		{"/p1/", "PATCH", func() http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("PATCH")) })
+		}()},
+	}
+	for testCase, test := range testTable {
+		req, _ := http.NewRequest(test.Method, test.Path, nil)
+		testReq := httptest.NewRecorder()
+		rt.Register(test.Path, test.Method, test.Handler)
+		rt.ServeHTTP(testReq, req)
+		if testReq.Body.String() != test.Method {
+			t.Errorf("#%d: body not equal", testCase)
+			continue
+		}
+	}
+}
+
+func TestHandlerDelegate(t *testing.T) {
+	testTable := []struct {
+		Path          string
+		PathToRequest string
+		Method        string
+		Handler       http.Handler
+	}{
+
+		{"/", "/ok!/", "DELETE", func() http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("DELETE")) })
+		}()},
+		{"/", "/hello/request/", "PATCH", func() http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("PATCH")) })
+		}()},
+		{"/hello/", "/hello/", "POST", func() http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("POST")) })
+		}()},
+		{"/param1/param2/param3/param4/", "/param1/param2/param3/param4/2/param2/param1/", "GET", func() http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("GET")) })
+		}()},
+		{"/p1/", "/p1/p2/313123", "KICK", func() http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("KICK")) })
+		}()},
+	}
+	for testCase, test := range testTable {
+		rt := NewRouter(&RouterOption{})
+		req, _ := http.NewRequest(test.Method, test.PathToRequest, nil)
+		testReq := httptest.NewRecorder()
+		rt.DELEGATE(test.Path, test.Method, test.Handler)
+		rt.ServeHTTP(testReq, req)
+		if testReq.Body.String() != test.Method {
+			t.Errorf("#%d: body not equal,got %v , expected %v", testCase, testReq.Body.String(), test.Method)
+			continue
+		}
+	}
+}

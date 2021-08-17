@@ -7,9 +7,7 @@ import (
 )
 
 func Benchmark5Params(b *testing.B) {
-	rt := NewRouter(&RouterOption{
-		EchoRoutes: false,
-	})
+	rt := NewRouter(&RouterOption{})
 	req, _ := http.NewRequest(MethodGet, "/param/path/to/parameter/john/12345", nil)
 	testReq := httptest.NewRecorder()
 	rt.Register("/param/:param1/:params2/:param3/:param4/:param5/", "GET", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -21,9 +19,7 @@ func Benchmark5Params(b *testing.B) {
 }
 
 func BenchmarkOneRoute(b *testing.B) {
-	rt := NewRouter(&RouterOption{
-		EchoRoutes: false,
-	})
+	rt := NewRouter(&RouterOption{})
 	req, _ := http.NewRequest(MethodGet, "/param", nil)
 	testReq := httptest.NewRecorder()
 	rt.Register("/param/", "GET", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

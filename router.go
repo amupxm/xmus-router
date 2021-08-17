@@ -1,7 +1,6 @@
 package router
 
 import (
-	"log"
 	"net/http"
 	"strings"
 )
@@ -18,11 +17,11 @@ type (
 		DELEGATE(path string, method string, handler http.Handler)
 	}
 	router struct {
-		echoRoutes       bool
 		notFoundHandler  http.Handler
 		methodNotAllowed http.Handler
+		routes           map[string]routeGroup
 
-		routes map[string]routeGroup
+		logf func(format string, args ...interface{})
 	}
 	routeGroup struct {
 		routes     []route
@@ -43,15 +42,17 @@ type (
 	RouterOption struct {
 		NotFoundHandler  http.Handler
 		MethodNotAllowed http.Handler
-		EchoRoutes       bool
+		Logf             func(format string, args ...interface{})
 	}
 )
 
 func NewRouter(opts *RouterOption) Router {
+	var notFoundHandler notFound
+	var methodNotAllowedHandler notNotAllowed
+
 	r := router{
-		echoRoutes:       true,
-		notFoundHandler:  defaultNotFoundHandler(),
-		methodNotAllowed: defaultMethodNotAllowedHandler(),
+		notFoundHandler:  notFoundHandler,
+		methodNotAllowed: methodNotAllowedHandler,
 		routes:           make(map[string]routeGroup),
 	}
 	if opts.MethodNotAllowed != nil {
@@ -59,6 +60,9 @@ func NewRouter(opts *RouterOption) Router {
 	}
 	if opts.NotFoundHandler != nil {
 		r.notFoundHandler = opts.NotFoundHandler
+	}
+	if nil != opts.Logf {
+		r.logf = opts.Logf
 	}
 	return &r
 }
@@ -87,8 +91,8 @@ func (rt *router) Register(path, method string, handler http.Handler) error {
 	rTemp.routes = append(rt.routes[path].routes, route)
 	rt.routes[path] = rTemp
 
-	if rt.echoRoutes {
-		log.Printf("Path : %s with method %s regstered\n", path, method)
+	if rt.logf != nil {
+		rt.logf("Path : %s with method %s regstered\n", path, method)
 	}
 	return nil
 }
@@ -97,20 +101,19 @@ func (rt router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// prepare request path
 	reqPath := prepareRequestPath(r.URL.Path)
 	// get routes
-	routes, err := rt.matchPath(reqPath)
+	routes, err := matchPath(rt.routes, reqPath)
 	if err != nil {
-		rt.notFoundHandler.ServeHTTP(w, r)
+		rt.notFoundHandler.ServeHTTP(w, r) // TODO  : logf request and responser
 		return
 
 	}
-
 	// get handler
 	route, err := rt.matchMethod(routes, r.Method)
 	if err != nil {
-		rt.methodNotAllowed.ServeHTTP(w, r)
+		rt.methodNotAllowed.ServeHTTP(w, r) // TODO  : logf request and responser
 		return
 	}
-	route.handler.ServeHTTP(w, r)
+	route.handler.ServeHTTP(w, r) // TODO  : logf request and responser
 }
 func (rt router) matchMethod(r []route, method string) (re route, err error) {
 	for _, route := range r {
@@ -121,9 +124,9 @@ func (rt router) matchMethod(r []route, method string) (re route, err error) {
 	return re, errMethodNotAllowed
 }
 
-func (rt router) matchPath(reqPath string) ([]route, error) {
+func matchPath(routes map[string]routeGroup, reqPath string) ([]route, error) {
 	splitedReq := strings.Split(reqPath, "/")
-	for routePath, routegp := range rt.routes {
+	for routePath, routegp := range routes {
 		if reqPath == routePath {
 			return routegp.routes, nil
 		}
@@ -131,11 +134,14 @@ func (rt router) matchPath(reqPath string) ([]route, error) {
 			continue
 		}
 		// if has params and delegate
-		if routegp.hasParams || routegp.isDelegate {
+		if (routegp.isDelegate) || (routegp.hasParams && len(splitedReq) == len(routegp.pathArr)) {
 			checkMatched := func() bool {
 				for i, v := range routegp.pathArr {
 					if v == "*" {
 						return true
+					}
+					if i > len(splitedReq)-1 {
+						return false
 					}
 					if v != splitedReq[i] && !isParamKey(routegp.params, v) {
 						return false
@@ -153,6 +159,9 @@ func (rt router) matchPath(reqPath string) ([]route, error) {
 
 func isParamKey(params []string, key string) bool {
 	for _, v := range params {
+		if len(key) <= 1 {
+			return false
+		}
 		if v == key[1:] {
 			return true
 		}
