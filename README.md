@@ -39,7 +39,7 @@ You can register handler with KICK method or anything else.
 
 | Benchmark name                 |       (1) |             (2) |          (3) |             (4) |
 | ------------------------------ | ---------:| ---------------:| ------------:| ---------------:|
-| **BenchmarkGin_XMUS-Router**   |  **55938**|  **3421 ns/op** | **192 B/op** |  **3 allocs/op**|
+| **BenchmarkXMUS-Router_GithubAll**   |  **55938**|  **3421 ns/op** | **192 B/op** |  **3 allocs/op**|
 | BenchmarkGin_GithubAll         |      43550|     27364 ns/op |       0 B/op |      0 allocs/op|
 | BenchmarkAce_GithubAll         |     40543 |     29670 ns/op |       0 B/op |     0 allocs/op |
 | BenchmarkAero_GithubAll        |     57632 |     20648 ns/op |       0 B/op |     0 allocs/op |
