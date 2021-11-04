@@ -92,7 +92,7 @@ func (rt *router) Register(path, method string, handler http.Handler) error {
 	rt.routes[path] = rTemp
 
 	if rt.logf != nil {
-		rt.logf("Path : %s with method %s regstered\n", path, method)
+		rt.logf("Path : %s with method %s regstered", path, method)
 	}
 	return nil
 }
