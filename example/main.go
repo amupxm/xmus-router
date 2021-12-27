@@ -21,10 +21,8 @@ func NewH(test string) HandlerOne {
 func main() {
 	rt := router.NewRouter(&router.RouterOption{})
 	h1 := NewH("hi1")
-	h2 := NewH("hi21")
 
-	rt.GET("/hello/", h1)
-	rt.DELEGATE("/bye/", http.MethodGet, h2)
+	rt.GET("/hello/:1/", h1)
 
 	http.ListenAndServe(":8080", rt)
 }
