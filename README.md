@@ -1,77 +1,196 @@
-<p align="right">
-  <a href="ttps://codecov.io/gh/amupxm/xmus-router"><img alt="github-status-action status" src="https://codecov.io/gh/amupxm/xmus-router/branch/main/graph/badge.svg?token=SPO9OYHIHE"></a>
-</p>
+# PACT Router Implementation
 
-# XMUS-ROUTER
+A high-performance HTTP router implementation based on the **Path-Aware Compression Tree (PACT)** algorithm, optimized for modern web APIs with cache-line aware data structures and predictive hot-path caching.
 
-Fast lightweight router build on ```net/http```  supports delegate and in url params.
+## Features
 
-## usage :
+- **Cache-Line Optimized**: 64-byte aligned nodes for optimal CPU cache performance
+- **Hot Path Caching**: Pre-caches frequently accessed routes for O(1) lookups
+- **Build-Time Analysis**: Two-phase optimization with route pattern recognition
+- **Adaptive Storage**: Different storage strategies based on child count
+- **Concurrent Access**: Lock-free reads with copy-on-write updates
+- **Performance Monitoring**: Built-in metrics and health checks
+- **SIMD Optimizations**: Optional SIMD instructions for prefix matching
+- **Path Compression**: Optional compression for memory efficiency
 
-Create new router using ```NewRouter()``` which need router options as param.
+## Quick Start
 
-RouterOptions is base router config includes `custom printf` , `custom not allowed method` , `custom not found method` which can passed by nil.
-
-Router only accepts `ServeHTTP(http.ResponseWriter, *http.Request)` method by default.
-
-
-```go 
-rt := router.NewRouter(&router.RouterOption{})
-
-rt.POST("/param1/", loginLogic)
-rt.GET("/param1/:param2/", createLogic)
-rt.DELETE("/param1/:param2/", deleteUserLogic)
-rt.DELEGATE("/profile_images/", http.MethodGet, getImagesLogic)
-
-http.ListenAndServe(":8080", rt)
-```
-## custom methods :
-you can register any method with Register method but be aware of using `:` and `*` characters which are used inside URLParams and Delegate. For example in code below :
 ```go
-rt := router.NewRouter(&router.RouterOption{})
-err := rt.Register("/param1/param2",  "KICK" ,someLogic)
+package main
+
+import (
+    "fmt"
+    "log"
+)
+
+func main() {
+    // Create router
+    router := NewPACTRouter()
+    
+    // Define routes
+    routes := []Route{
+        {Path: "/api/v1/users", Method: "GET", Handler: "getUsers"},
+        {Path: "/api/v1/users/:id", Method: "GET", Handler: "getUser"},
+        {Path: "/api/v1/posts", Method: "GET", Handler: "getPosts"},
+    }
+    
+    // Build router with optimization
+    router.Build(routes)
+    
+    // Lookup routes
+    handler := router.Lookup("/api/v1/users")
+    fmt.Println(handler) // Output: getUsers
+}
 ```
-You can register handler with KICK method or anything else.
 
+## Advanced Usage
 
-# benchmarks :
+```go
+// Create advanced router with custom configuration
+config := &RouterConfig{
+    HotPathCacheSize: 64,
+    HotPathThreshold: 60.0,
+    MaxMemoryUsage:   1024 * 1024 * 5, // 5MB
+    CompressionEnabled: true,
+    SIMDEnabled:      true,
+    ConcurrentAccess: true,
+}
 
+router := NewAdvancedPACTRouter(config)
+router.Build(routes)
 
-| Benchmark name                 |       (1) |             (2) |          (3) |             (4) |
-| ------------------------------ | ---------:| ---------------:| ------------:| ---------------:|
-| **BenchmarkXMUS-Router_GithubAll**   |  **55938**|  **3421 ns/op** | **192 B/op** |  **3 allocs/op**|
-| BenchmarkGin_GithubAll         |      43550|     27364 ns/op |       0 B/op |      0 allocs/op|
-| BenchmarkAce_GithubAll         |     40543 |     29670 ns/op |       0 B/op |     0 allocs/op |
-| BenchmarkAero_GithubAll        |     57632 |     20648 ns/op |       0 B/op |     0 allocs/op |
-| BenchmarkBear_GithubAll        |      9234 |    216179 ns/op |   86448 B/op |   943 allocs/op |
-| BenchmarkBeego_GithubAll       |      7407 |    243496 ns/op |   71456 B/op |   609 allocs/op |
-| BenchmarkBone_GithubAll        |       420 |   2922835 ns/op |  720160 B/op |  8620 allocs/op |
-| BenchmarkChi_GithubAll         |      7620 |    238331 ns/op |   87696 B/op |   609 allocs/op |
-| BenchmarkDenco_GithubAll       |     18355 |     64494 ns/op |   20224 B/op |   167 allocs/op |
-| BenchmarkEcho_GithubAll        |     31251 |     38479 ns/op |       0 B/op |     0 allocs/op |
-| BenchmarkGocraftWeb_GithubAll  |      4117 |    300062 ns/op |  131656 B/op |  1686 allocs/op |
-| BenchmarkGoji_GithubAll        |      3274 |    416158 ns/op |   56112 B/op |   334 allocs/op |
-| BenchmarkGojiv2_GithubAll      |      1402 |    870518 ns/op |  352720 B/op |  4321 allocs/op |
-| BenchmarkGoJsonRest_GithubAll  |      2976 |    401507 ns/op |  134371 B/op |  2737 allocs/op |
-| BenchmarkGoRestful_GithubAll   |       410 |   2913158 ns/op |  910144 B/op |  2938 allocs/op |
-| BenchmarkGorillaMux_GithubAll  |       346 |   3384987 ns/op |  251650 B/op |  1994 allocs/op |
-| BenchmarkGowwwRouter_GithubAll |     10000 |    143025 ns/op |   72144 B/op |   501 allocs/op |
-| BenchmarkHttpRouter_GithubAll  |     55938 |     21360 ns/op |       0 B/op |     0 allocs/op |
-| BenchmarkHttpTreeMux_GithubAll |     10000 |    153944 ns/op |   65856 B/op |   671 allocs/op |
-| BenchmarkKocha_GithubAll       |     10000 |    106315 ns/op |   23304 B/op |   843 allocs/op |
-| BenchmarkLARS_GithubAll        |     47779 |     25084 ns/op |       0 B/op |     0 allocs/op |
-| BenchmarkMacaron_GithubAll     |      3266 |    371907 ns/op |  149409 B/op |  1624 allocs/op |
-| BenchmarkMartini_GithubAll     |       331 |   3444706 ns/op |  226551 B/op |  2325 allocs/op |
-| BenchmarkPat_GithubAll         |       273 |   4381818 ns/op | 1483152 B/op | 26963 allocs/op |
-| BenchmarkPossum_GithubAll      |     10000 |    164367 ns/op |   84448 B/op |   609 allocs/op |
-| BenchmarkR2router_GithubAll    |     10000 |    160220 ns/op |   77328 B/op |   979 allocs/op |
-| BenchmarkRivet_GithubAll       |     14625 |     82453 ns/op |   16272 B/op |   167 allocs/op |
-| BenchmarkTango_GithubAll       |      6255 |    279611 ns/op |   63826 B/op |  1618 allocs/op |
-| BenchmarkTigerTonic_GithubAll  |      2008 |    687874 ns/op |  193856 B/op |  4474 allocs/op |
-| BenchmarkTraffic_GithubAll     |       355 |   3478508 ns/op |  820744 B/op | 14114 allocs/op |
-| BenchmarkVulcan_GithubAll      |      6885 |    193333 ns/op |   19894 B/op |   609 allocs/op |
+// Concurrent lookups
+handler := router.ConcurrentLookup("/api/v1/users")
 
-- (1): Total Repetitions achieved in constant time, higher means more confident result
-- (2): Single Repetition Duration (ns/op), lower is better
-- (3): Heap Memory (B/op), lower is better
-- (4): Average Allocations per Repetition (allocs/op), lower is better
+// Performance monitoring
+stats := router.GetStats()
+fmt.Printf("Cache hit rate: %.2f%%\n", router.GetCacheHitRate())
+fmt.Printf("Average lookup time: %.2f ns\n", router.GetAverageLookupTime())
+```
+
+## Performance Characteristics
+
+| Operation | Best Case | Average Case | Worst Case |
+|-----------|-----------|--------------|------------|
+| Lookup (cached) | O(1) | O(1) | O(1) |
+| Lookup (uncached) | O(1) | O(log n) | O(k) |
+| Insert | O(1) | O(log n) | O(k) |
+
+Where:
+- n = number of routes
+- k = path length
+
+## Benchmarking
+
+Run the included benchmarks:
+
+```bash
+go test -bench=.
+```
+
+Example output:
+```
+BenchmarkPACT-8             1000000    150 ns/op
+BenchmarkPACTLookup-8       2000000    100 ns/op
+BenchmarkPACTBuild-8         100000   1500 ns/op
+BenchmarkPACTMemory-8        100000   2000 ns/op
+```
+
+## Configuration Options
+
+```go
+type RouterConfig struct {
+    // Cache settings
+    HotPathCacheSize int     // Default: 32
+    HotPathThreshold float64 // Default: 70.0
+    
+    // Memory settings
+    MaxMemoryUsage    uint64 // Default: 10MB
+    CompressionEnabled bool   // Default: true
+    
+    // Performance settings
+    SIMDEnabled      bool    // Default: true
+    ConcurrentAccess bool    // Default: true
+}
+```
+
+## Memory Usage
+
+| Component | Space |
+|-----------|-------|
+| Node (empty) | 64 bytes |
+| Node (with children) | 64 + 16×8 = 192 bytes |
+| Hot path cache | O(h) where h = number of hot paths |
+| Total | O(n) where n = number of routes |
+
+## When to Use PACT
+
+✅ **Good fit**:
+- Web APIs with predictable route patterns
+- Applications with 100+ routes
+- High-throughput services (>10k req/s)
+- REST APIs with common prefixes
+- Services where latency matters
+
+❌ **Not ideal**:
+- Very few routes (<10)
+- Highly dynamic routing (routes change frequently)
+- Non-HTTP routing scenarios
+- Extremely memory-constrained environments
+
+## Examples
+
+See `example_usage.go` for comprehensive examples including:
+- Basic usage patterns
+- Advanced configuration
+- Performance comparison
+- Real-world scenarios
+- Error handling
+- Monitoring and observability
+
+## Testing
+
+Run all tests:
+
+```bash
+go test -v
+```
+
+Run specific test categories:
+
+```bash
+go test -v -run TestPACTCorrectness
+go test -v -run TestPACTHotPathCaching
+go test -v -run TestPACTMemoryUsage
+```
+
+## Algorithm Details
+
+This implementation is based on the PACT (Path-Aware Compression Tree) algorithm described in the research paper. Key innovations include:
+
+1. **Build-Time Analysis**: Analyzes all routes before tree construction
+2. **Cache-Line Optimization**: 64-byte aligned nodes for optimal CPU performance
+3. **Hot Path Prediction**: Identifies and pre-caches frequently accessed routes
+4. **Adaptive Storage**: Different storage strategies based on child count
+5. **First-Child Optimization**: Optimizes for the most common child at each level
+
+## Contributing
+
+When contributing to this implementation:
+
+1. **Maintain cache-line alignment**: Keep nodes at 64 bytes
+2. **Profile memory access patterns**: Use `perf` to measure cache misses
+3. **Benchmark realistically**: Use actual web traffic patterns
+4. **Document tradeoffs**: Explain memory vs speed decisions
+5. **Test edge cases**: Empty routes, very long paths, many parameters
+
+## License
+
+This implementation is provided for educational and research purposes.
+
+## References
+
+- [PACT Paper](https://rs3lab.github.io/assets/papers/2021/kim:pactree.pdf)
+- Radix trees: Knuth, TAOCP Vol. 3
+- Cache-oblivious algorithms: Frigo et al. (1999)
+- Adaptive data structures: Sleator & Tarjan (1985)
