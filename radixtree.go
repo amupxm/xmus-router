@@ -1,6 +1,7 @@
 package router
 
 import (
+	"strings"
 	"sync"
 	"unsafe"
 )
@@ -120,7 +121,6 @@ func (t *radixTree[T]) Find(method, path string) (HandlerFunc[T], Parameters) {
 
 // addRoute adds a route to the node
 func (n *node[T]) addRoute(method, path string, handler HandlerFunc[T]) {
-	fullPath := path
 	n.priority++
 
 	// Empty path means this node is the target
@@ -130,6 +130,11 @@ func (n *node[T]) addRoute(method, path string, handler HandlerFunc[T]) {
 		}
 		n.methods[method] = handler
 		return
+	}
+
+	// Safety check to prevent infinite recursion
+	if len(path) > 1000 {
+		panic("path too long, possible infinite recursion")
 	}
 
 	// Handle parameter routes (:param)
@@ -145,22 +150,55 @@ func (n *node[T]) addRoute(method, path string, handler HandlerFunc[T]) {
 	}
 
 	// Handle static routes
-	n.insertStaticRoute(method, path, fullPath, handler)
+	n.insertStaticRoute(method, path, handler)
 }
 
 // insertStaticRoute handles static path segments
-func (n *node[T]) insertStaticRoute(method, path, fullPath string, handler HandlerFunc[T]) {
-	// Find common prefix
-	i := 0
-	max := min(len(path), len(n.path))
-	for i < max && path[i] == n.path[i] {
-		i++
+func (n *node[T]) insertStaticRoute(method, path string, handler HandlerFunc[T]) {
+	// Find the first slash or end of string
+	slashIndex := strings.Index(path, "/")
+	var staticPart string
+	var remainingPath string
+
+	if slashIndex == -1 {
+		// No slash found, entire path is static
+		staticPart = path
+		remainingPath = ""
+	} else {
+		// Split at the slash
+		staticPart = path[:slashIndex]
+		remainingPath = path[slashIndex+1:]
 	}
 
-	// Split node if needed
-	if i < len(n.path) {
+	// If this node has no path yet, set it
+	if n.path == "" {
+		n.path = staticPart
+		n.nType = static
+		if remainingPath == "" {
+			// This is the final node
+			if n.methods == nil {
+				n.methods = make(map[string]HandlerFunc[T])
+			}
+			n.methods[method] = handler
+		} else {
+			// Continue with remaining path
+			n.addRoute(method, remainingPath, handler)
+		}
+		return
+	}
+
+	// Find common prefix with current node
+	commonLen := 0
+	maxLen := min(len(staticPart), len(n.path))
+	for commonLen < maxLen && staticPart[commonLen] == n.path[commonLen] {
+		commonLen++
+	}
+
+	// If we have a common prefix, we need to split this node
+	if commonLen < len(n.path) {
+		// Split the current node
 		child := &node[T]{
-			path:       n.path[i:],
+			path:       n.path[commonLen:],
 			nType:      n.nType,
 			children:   n.children,
 			methods:    n.methods,
@@ -170,47 +208,78 @@ func (n *node[T]) insertStaticRoute(method, path, fullPath string, handler Handl
 			priority:   n.priority - 1,
 		}
 
+		// Reset current node
+		n.path = n.path[:commonLen]
 		n.children = []*node[T]{child}
-		n.indices = []byte{n.path[i]}
-		n.path = path[:i]
+		n.indices = []byte{child.path[0]}
 		n.methods = nil
 		n.wildChild = nil
 		n.paramChild = nil
 	}
 
-	// Add remaining path
-	if i < len(path) {
-		path = path[i:]
-		c := path[0]
-
-		// Find existing child
-		for j, index := range n.indices {
-			if c == index {
-				n.children[j].addRoute(method, path, handler)
-				return
+	// If we've consumed the entire static part, continue with remaining path
+	if commonLen == len(staticPart) {
+		if remainingPath == "" {
+			// This is the final node
+			if n.methods == nil {
+				n.methods = make(map[string]HandlerFunc[T])
 			}
+			n.methods[method] = handler
+		} else {
+			// Continue with remaining path
+			n.addRoute(method, remainingPath, handler)
 		}
+		return
+	}
 
-		// Create new child
-		child := &node[T]{
-			nType:   static,
-			methods: make(map[string]HandlerFunc[T]),
+	// We need to add a new child for the remaining static part
+	remainingStatic := staticPart[commonLen:]
+
+	if len(remainingStatic) == 0 {
+		// This shouldn't happen, but handle it gracefully
+		if remainingPath == "" {
+			if n.methods == nil {
+				n.methods = make(map[string]HandlerFunc[T])
+			}
+			n.methods[method] = handler
+		} else {
+			n.addRoute(method, remainingPath, handler)
 		}
+		return
+	}
 
-		n.addChild(child, c)
-		child.addRoute(method, path, handler)
+	c := remainingStatic[0]
+
+	// Check if we already have a child with this character
+	for i, index := range n.indices {
+		if index == c {
+			n.children[i].addRoute(method, remainingStatic+"/"+remainingPath, handler)
+			return
+		}
+	}
+
+	// Create new child
+	child := &node[T]{
+		nType:   static,
+		methods: make(map[string]HandlerFunc[T]),
+	}
+
+	// Add the child
+	n.addChild(child, c)
+
+	// Set up the child's path and continue
+	if remainingPath == "" {
+		child.path = remainingStatic
+		child.methods[method] = handler
 	} else {
-		// This node is the target
-		if n.methods == nil {
-			n.methods = make(map[string]HandlerFunc[T])
-		}
-		n.methods[method] = handler
+		child.path = remainingStatic
+		child.addRoute(method, remainingPath, handler)
 	}
 }
 
 // insertParamRoute handles parameter routes (:param)
 func (n *node[T]) insertParamRoute(method, path string, handler HandlerFunc[T]) {
-	// Find parameter name
+	// Find parameter name (until next slash or end)
 	end := 1
 	for end < len(path) && path[end] != '/' {
 		end++
@@ -218,6 +287,7 @@ func (n *node[T]) insertParamRoute(method, path string, handler HandlerFunc[T]) 
 
 	paramName := path[1:end]
 
+	// Create or get parameter child
 	if n.paramChild == nil {
 		n.paramChild = &node[T]{
 			nType:     param,
@@ -226,16 +296,20 @@ func (n *node[T]) insertParamRoute(method, path string, handler HandlerFunc[T]) 
 		}
 	}
 
+	// Continue with remaining path
 	if end < len(path) {
 		n.paramChild.addRoute(method, path[end+1:], handler)
 	} else {
+		if n.paramChild.methods == nil {
+			n.paramChild.methods = make(map[string]HandlerFunc[T])
+		}
 		n.paramChild.methods[method] = handler
 	}
 }
 
 // insertWildcardRoute handles wildcard routes (*wildcard)
 func (n *node[T]) insertWildcardRoute(method, path string, handler HandlerFunc[T]) {
-	// Find wildcard name
+	// Find wildcard name (until next slash or end)
 	end := 1
 	for end < len(path) && path[end] != '/' {
 		end++
@@ -243,6 +317,7 @@ func (n *node[T]) insertWildcardRoute(method, path string, handler HandlerFunc[T
 
 	paramName := path[1:end]
 
+	// Create or get wildcard child
 	if n.wildChild == nil {
 		n.wildChild = &node[T]{
 			nType:     wildcard,
@@ -252,6 +327,9 @@ func (n *node[T]) insertWildcardRoute(method, path string, handler HandlerFunc[T
 	}
 
 	// Wildcard consumes rest of path
+	if n.wildChild.methods == nil {
+		n.wildChild.methods = make(map[string]HandlerFunc[T])
+	}
 	n.wildChild.methods[method] = handler
 }
 
@@ -275,87 +353,79 @@ func (n *node[T]) addChild(child *node[T], index byte) {
 
 // findRoute searches for a route in the tree
 func (n *node[T]) findRoute(method, path string, params *Parameters) HandlerFunc[T] {
-walk:
-	for {
-		// Check if we've consumed all path
-		if len(path) <= len(n.path) {
-			if path == n.path {
-				if handler, ok := n.methods[method]; ok {
-					return handler
-				}
-			}
+	// If we have a path, check if it matches
+	if n.path != "" {
+		if len(path) < len(n.path) || path[:len(n.path)] != n.path {
 			return nil
 		}
-
-		// Check path prefix
-		if path[:len(n.path)] == n.path {
-			path = path[len(n.path):]
-
-			// Try static children first (fastest)
-			if len(n.indices) > 0 {
-				c := path[0]
-
-				// Binary search for better performance with many children
-				i := 0
-				j := len(n.indices)
-				for i < j {
-					mid := (i + j) / 2
-					if n.indices[mid] < c {
-						i = mid + 1
-					} else {
-						j = mid
-					}
-				}
-
-				if i < len(n.indices) && n.indices[i] == c {
-					n = n.children[i]
-					continue walk
-				}
-			}
-
-			// Try parameter child
-			if n.paramChild != nil {
-				// Find end of parameter value
-				end := 0
-				for end < len(path) && path[end] != '/' {
-					end++
-				}
-
-				// Add parameter
-				*params = append(*params, Parameter{
-					Key:   n.paramChild.paramName,
-					Value: path[:end],
-				})
-
-				if end == len(path) {
-					// End of path, check for handler
-					if handler, ok := n.paramChild.methods[method]; ok {
-						return handler
-					}
-					return nil
-				}
-
-				// Continue with remaining path
-				n = n.paramChild
-				path = path[end+1:] // Skip the /
-				continue walk
-			}
-
-			// Try wildcard child (lowest priority)
-			if n.wildChild != nil {
-				*params = append(*params, Parameter{
-					Key:   n.wildChild.paramName,
-					Value: path,
-				})
-
-				if handler, ok := n.wildChild.methods[method]; ok {
-					return handler
-				}
-			}
+		path = path[len(n.path):]
+		// If there's a slash after the matched path, consume it
+		if len(path) > 0 && path[0] == '/' {
+			path = path[1:]
 		}
+	}
 
+	// If we've consumed all path, check for handler
+	if path == "" {
+		if handler, ok := n.methods[method]; ok {
+			return handler
+		}
 		return nil
 	}
+
+	// Try static children first (highest priority)
+	if len(n.children) > 0 {
+		c := path[0]
+		for i, index := range n.indices {
+			if index == c {
+				if handler := n.children[i].findRoute(method, path, params); handler != nil {
+					return handler
+				}
+				break
+			}
+		}
+	}
+
+	// Try parameter child (medium priority)
+	if n.paramChild != nil {
+		// Find end of parameter value
+		end := 0
+		for end < len(path) && path[end] != '/' {
+			end++
+		}
+
+		// Add parameter
+		*params = append(*params, Parameter{
+			Key:   n.paramChild.paramName,
+			Value: path[:end],
+		})
+
+		if end == len(path) {
+			// End of path, check for handler
+			if handler, ok := n.paramChild.methods[method]; ok {
+				return handler
+			}
+		} else {
+			// Continue with remaining path
+			if handler := n.paramChild.findRoute(method, path[end+1:], params); handler != nil {
+				return handler
+			}
+		}
+	}
+
+	// Try wildcard child (lowest priority)
+	if n.wildChild != nil {
+		*params = append(*params, Parameter{
+			Key:   n.wildChild.paramName,
+			Value: path,
+		})
+
+		if handler, ok := n.wildChild.methods[method]; ok {
+			return handler
+		}
+	}
+
+	return nil
 }
 
 // updatePriority reorders children based on priority
